@@ -11,11 +11,13 @@
 
 import os,re
 import warnings
+import scipy
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from sklearn.neighbors import KernelDensity
 from sys import argv,exit
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -2292,8 +2294,7 @@ class SummarizeDataFrames():
         groupedDataFrames = {i:[] for i in groups}
         for dataFile in dataFileNames:
             dataFrame = pd.read_csv(dataFilesPath+dataFile,sep='\t',encoding='unicode_escape')
-            dfFirstRow = dataFrame[:1]
-            dataFrame = pd.concat([dfFirstRow,dataFrame[countFrom:]])
+            dataFrame = dataFrame[countFrom:]
             for i in groups:
                 if re.search(i,dataFile): groupedDataFrames[i].append(dataFrame)
         self.groupedDataFrames = groupedDataFrames
@@ -2325,11 +2326,17 @@ class SummarizeDataFrames():
             sampleSizes = np.zeros(nDataFrames)
             sqrGroupVar = np.zeros(nDataFrames,dtype='object')
             averages, variances = np.zeros(nDataFrames), np.zeros(nDataFrames)
+            modes, medians = np.zeros(nDataFrames), np.zeros(nDataFrames)
             moe, moeSqr, moeVar = np.zeros(nDataFrames), np.zeros(nDataFrames), np.zeros(nDataFrames)
             for variable in group[0].columns:
                 for j in range(nDataFrames):
                     group[j][variable].replace(-np.inf, np.nan, inplace=True)
                     sampleSizes[j] = len(group[j][variable])
+                    kde = KernelDensity(bandwidth=1.0, kernel='gaussian').fit(group[j][[variable]])
+                    density = np.exp(kde.score_samples(group[j][[variable]]))
+                    tmp = group[j][variable][density == density.max()]
+                    modes[j] = tmp.iloc[0]
+                    medians[j] = group[j][variable].median()
                     averages[j] = group[j][variable].mean()
                     variances[j] = group[j][variable].std()
                     tmp = group[j][variable].to_numpy(dtype='float', copy=True)
@@ -2340,6 +2347,8 @@ class SummarizeDataFrames():
                     moeSqr[j] = np.sqrt(MeanFluctuations(tmp2, variable))
                 summedDataFrames[i][f'size{variable}'] = pd.Series(sampleSizes)
                 summedDataFrames[i][variable] = pd.Series(averages)
+                summedDataFrames[i][f'Mode({variable})'] = pd.Series(modes)
+                summedDataFrames[i][f'Median({variable})'] = pd.Series(medians)
                 summedDataFrames[i][f'Var({variable})'] = pd.Series(variances)
                 summedDataFrames[i][f'MOE({variable})'] = pd.Series(moe)
                 summedDataFrames[i][f'MOE(({variable})^2)'] = pd.Series(moeSqr)
@@ -2381,7 +2390,7 @@ def MeanFluctuations(pdSeries, variable):
         if (statIneff < 1): continue
         statIneffs[step] = statIneff
         step += 1
-    variance = statIneffs.min()*runVar/sampleSize
+    variance = statIneffs.max()*runVar/sampleSize
     return variance
 def VarianceFluctuations(pdSeries, variable):
     step = 0
