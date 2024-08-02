@@ -17,7 +17,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from sklearn.neighbors import KernelDensity
 from sys import argv,exit
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -614,7 +613,7 @@ class Raspa(Extract):
         boxVectorCx, boxVectorCy, boxVectorCz = [], [], []
         for line in range(len(fileLines)):
             findBoxVectors = re.search('Current Box:',fileLines[line])
-            if findBoxVectors: 
+            if findBoxVectors:
                 vectorA = re.search('Current Box:\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*).+Average',fileLines[line])
                 vectorB = re.search('\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*).+\[',fileLines[line+1])
                 vectorC = re.search('\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*).+\[',fileLines[line+2])
@@ -1030,7 +1029,7 @@ class Raspa(Extract):
                     plt.tight_layout()
                     plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-{vec}_{dim}.pdf')
 class MezCal(Extract):
-    def __init__(self): 
+    def __init__(self):
         Extract.__init__(self,argv)
         self.listLogFiles = []
         self.unitStyle = ''
@@ -1045,7 +1044,7 @@ class MezCal(Extract):
     def ReadInputFiles(self):
         path = self.path
         listInputFiles, listLogFiles = [], []
-        molFileFound = False 
+        molFileFound = False
         for root, dirs, files in os.walk(path):
             for fileName in files:
                 if fileName.endswith('.inp'): listInputFiles.append(os.path.join(root, fileName))
@@ -1064,13 +1063,14 @@ class MezCal(Extract):
         units['energy'] = 'K'
         units['temperature'] = 'K'
         units['pressure'] = 'Pa'
-        units['density'] = 'g/cm^3'
+        units['density'] = 'mmol/cm^3'
         self.units = units
         self.unitStyle = unitStyle
     def PrintInputParameters(self):
         path = self.path
         varsToExtract = self.varsToExtract
         sort = self.sort
+        dimensions = self.dimensions
         createFigures = self.createFigures
         outFileName, createOutFile = self.outFile
         listInFiles = self.listInFiles
@@ -1079,6 +1079,7 @@ class MezCal(Extract):
         print(f'\tInput path: {path}')
         print(f'\tVariables to extract: {varsToExtract}')
         print(f'\tSort variables according to: {sort}')
+        print(f'\tBox dimensions: {dimensions}')
         print(f'\tFluid components: {components}')
         print(f'\tCreate figures: {createFigures}')
         print(f'\tCreate output file: {createOutFile}')
@@ -1087,13 +1088,13 @@ class MezCal(Extract):
             print(f'\t\t{listInFiles[i]}')
         print(f'\tLog files:')
         for i in range(len(listLogFiles)):
-            print(f'\t\t{listLogFiles[i]}')
+            print(f'\t\t{i}  {listLogFiles[i]}')
     def ReadOutputFile(self, fileName):
         outFile = self.outFile
         box = re.search('.+/(box\d*)/.+', fileName).group(1)
         outFilePath = re.search(r'^(.+/)?(.+)(\..+)$',outFile[0])
         outFileName = f'{box}_{outFilePath.group(2)}'
-        if not outFilePath.group(3): 
+        if not outFilePath.group(3):
             outFilePath = (outFilePath.group(1), outFileName, '.dat')
         else: outFilePath = (outFilePath.group(1), outFileName, outFilePath.group(3))
         self.outFilePath = outFilePath
@@ -1119,30 +1120,30 @@ class MezCal(Extract):
                         outPath, outFileName, outExtension = self.ReadOutputFile(listLogFiles[i])
                         if outPath:
                             print(f'\nCreating output file: {outPath}dataFiles/{i}_{comp}_{outFileName}{outExtension} ...')
-                        else: 
+                        else:
                             print(f'\nCreating output file: dataFiles/{i}_{comp}_{outFileName}{outExtension} ...')
                         self.CreateOutFile(outData,i)
-                        if figuresToExtract: 
+                        if figuresToExtract:
                             print('\nCreating figures...')
-                            for j in figuresToExtract: 
+                            for j in figuresToExtract:
                                 self.PlotVariables(outData,i,j,comp)
                                 print(f'\t{outPath}Figures/{i}_{outFileName}_{j.upper()}_{comp} ...')
                     else:
-                        if figuresToExtract: 
+                        if figuresToExtract:
                             _ = self.ReadOutputFile()
                             print('\nCreating figures...')
-                            for j in figuresToExtract: 
+                            for j in figuresToExtract:
                                 self.PlotVariables(outData,i,j,comp)
                                 print(f'\tFigures/{i}_{outFileName}_{j.upper()}_{comp} ...')
                     if histsToExtract:
                         outPath, outFileName, outExtension = self.ReadOutputFile(listLogFiles[i])
                         print(f'\nCreating histograms...')
                         if outPath:
-                            for j in histsToExtract: 
+                            for j in histsToExtract:
                                 self.PlotHistograms(outData,i,j,comp)
                                 print(f'\t{outPath}histograms/{i}_{outFileName}_{j.upper()}_{comp} ...')
-                        else: 
-                            for j in histsToExtract: 
+                        else:
+                            for j in histsToExtract:
                                 self.PlotHistograms(outData,i,j,comp)
                                 print(f'\thistograms/{i}_{outFileName}_{j.upper()}_{comp} ...')
                     print(f'\nNormal termination for file {listLogFiles[i]}')
@@ -1150,6 +1151,7 @@ class MezCal(Extract):
         exit(0)
     def CallExtractors(self, fileName): #Check for pressures!
         varsToExtract = self.varsToExtract
+        dimensions = self.dimensions
         components = self.components
         units = self.units
         outData = {}
@@ -1181,13 +1183,15 @@ class MezCal(Extract):
             unit = units['energy']
             outData[f'ExMu[{unit}]'] = dataFrame['muEx[K]']
         if ('n' in varsToExtract): outData['N'] = dataFrame['NParts']
+        if ('ntotal' in varsToExtract): outData['NTotal'] = dataFrame['NTotal']
         if ('rho' in varsToExtract):
             unit = units['density']
-            outData[f'Rho[{unit}]'] = dataFrame['Dens[g/cm^3]']
+            outData[f'Rho[{unit}]'] = dataFrame['Dens[mmol/cm^3]']
         if ('l' in varsToExtract):
             unit = units['distance']
-            dim = 'x'
+            dim = 'z'
             outData[f'L_{dim}[{unit}]'] = dataFrame[f'width[AA]']
+            # for dim in dimensions: outData[f'L_{dim}[{unit}]'] = dataFrame[f'size_{dim}[AA]']
         return outData
     def ExtractPressures(self,fileName):
         units = self.units['pressure']
@@ -1236,13 +1240,13 @@ class MezCal(Extract):
             unit = units['density']
             plt.figure()
             outData[f'Rho[{unit}]'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'$\\rho$ [g/cm$^3$] ({comp})')
+            plt.ylabel(f'$\\rho$ [mmol/cm$^3$]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-Rho_{comp}.pdf')
         if ('n' == variable):
             plt.figure()
             outData[f'N'][term:].plot(style='.',grid=True,xlabel='Evolution of simulation (steps, sets of cycles)')
-            plt.ylabel(f'N {comp}')
+            plt.ylabel(f'N')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-N_{comp}.pdf')
         if ('mu' == variable):
@@ -1262,7 +1266,6 @@ class MezCal(Extract):
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}-L_{dim}.pdf')
     def PlotHistograms(self,outData,fileNumber,variable, comp):
         term = self.termalizationInHists
-        components = self.components
         dimensions = self.dimensions
         units = self.units
         outPath,outFileName,outExtension = self.outFilePath
@@ -1271,59 +1274,59 @@ class MezCal(Extract):
         else: outPath = 'histograms/' #If output file is not in a subdirectory.
         os.makedirs(outPath, exist_ok=True)
         if ('v' == variable):
+            unit = units['volume']
             plt.figure()
-            sns.histplot(data=outData['V[A^3]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['V[A^3]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$V$[A$^3$]')
+            sns.histplot(data=outData[f'V[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'V[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$V$ [\\r{A}$^3$]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_V.pdf')
         if ('t' == variable):
+            unit = units['temperature']
             plt.figure()
-            sns.histplot(data=outData['T[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$T$[K]')
+            sns.histplot(data=outData[f'T[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'T[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$T$ [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_T.pdf')
         if ('p' == variable):
+            unit = units['pressure']
             plt.figure()
-            sns.histplot(data=outData[f'P[{units}]]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData[f'P[{units}]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel(f'$P$[{units}]')
+            sns.histplot(data=outData[f'P[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'P[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'$P$ [Pa]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_P.pdf')
         if ('u' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['U[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['U[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$U$[K]')
+            sns.histplot(data=outData[f'U[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'U[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$U$ [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_U.pdf')
         if ('mu' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData['Mu[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['Mu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$\mu$[K]')
+            sns.histplot(data=outData[f'Mu[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Mu[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\mu$ [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Mu_{comp}.pdf')
-        if ('idmu' == variable):
-            plt.figure()
-            sns.histplot(data=outData['IdMu[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['IdMu[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$\mu_{\\rm id}$[K]')
-            plt.tight_layout()
-            plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_IdMu_{comp}.pdf')
         if ('exmu' == variable):
+            unit = units['energy']
             plt.figure()
-            sns.histplot(data=outData[f'ExMu[K]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData['T[K]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$\mu_{\\rm ex}$[K]')
+            sns.histplot(data=outData[f'ExMu[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'ExMu[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\mu_{\\rm ex}$ [K]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_ExMu_{comp}.pdf')
         if ('rho' == variable):
+            unit = units['density']
             plt.figure()
-            sns.histplot(data=outData[f'Rho[kg/mol]'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData[f'Rho[kg/mol]'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel('$\\rho$[kg/mol]')
+            sns.histplot(data=outData[f'Rho[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'Rho[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel('$\\rho$ [mmol/cm$^3$]')
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_Rho_{comp}.pdf')
         if ('n' == variable):
@@ -1334,11 +1337,12 @@ class MezCal(Extract):
             plt.tight_layout()
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_N_{comp}.pdf')
         if ('l' == variable):
-            dim = 'x'
+            unit = units['distance']
+            dim = 'z'
             plt.figure()
-            sns.histplot(data=outData[f'Box-L[A] {dim}'][term:],bins=50,discrete=False,stat='probability')
-            if kde: sns.kdeplot(data=outData[f'Box-L[A] {dim}'][term:],bw_adjust=3,color='r',linewidth=5)
-            plt.xlabel(f'Box-L[A] {dim}')
+            sns.histplot(data=outData[f'L_{dim}[{unit}]'][term:],bins=50,discrete=False,stat='density')
+            if kde: sns.kdeplot(data=outData[f'L_{dim}[{unit}]'][term:],bw_adjust=3,color='r',linewidth=5)
+            plt.xlabel(f'L_{dim} [\\r{{A}}]')
             plt.savefig(f'{outPath}/{fileNumber}_{outFileName}_L_{dim}.pdf')
 class Chainbuild(Extract):
     def __init__(self):
@@ -2326,17 +2330,11 @@ class SummarizeDataFrames():
             sampleSizes = np.zeros(nDataFrames)
             sqrGroupVar = np.zeros(nDataFrames,dtype='object')
             averages, variances = np.zeros(nDataFrames), np.zeros(nDataFrames)
-            modes, medians = np.zeros(nDataFrames), np.zeros(nDataFrames)
             moe, moeSqr, moeVar = np.zeros(nDataFrames), np.zeros(nDataFrames), np.zeros(nDataFrames)
             for variable in group[0].columns:
                 for j in range(nDataFrames):
                     group[j][variable].replace(-np.inf, np.nan, inplace=True)
                     sampleSizes[j] = len(group[j][variable])
-                    kde = KernelDensity(bandwidth=1.0, kernel='gaussian').fit(group[j][[variable]])
-                    density = np.exp(kde.score_samples(group[j][[variable]]))
-                    tmp = group[j][variable][density == density.max()]
-                    modes[j] = tmp.iloc[0]
-                    medians[j] = group[j][variable].median()
                     averages[j] = group[j][variable].mean()
                     variances[j] = group[j][variable].std()
                     tmp = group[j][variable].to_numpy(dtype='float', copy=True)
@@ -2347,8 +2345,6 @@ class SummarizeDataFrames():
                     moeSqr[j] = np.sqrt(MeanFluctuations(tmp2, variable))
                 summedDataFrames[i][f'size{variable}'] = pd.Series(sampleSizes)
                 summedDataFrames[i][variable] = pd.Series(averages)
-                summedDataFrames[i][f'Mode({variable})'] = pd.Series(modes)
-                summedDataFrames[i][f'Median({variable})'] = pd.Series(medians)
                 summedDataFrames[i][f'Var({variable})'] = pd.Series(variances)
                 summedDataFrames[i][f'MOE({variable})'] = pd.Series(moe)
                 summedDataFrames[i][f'MOE(({variable})^2)'] = pd.Series(moeSqr)
